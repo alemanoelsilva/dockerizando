@@ -15,5 +15,7 @@ RUN npm install
 # esposed port
 EXPOSE 3030
 
-# entrypoint allows you to pass args when you run "docker run..." 
+# entrypoint allows you to pass args when you run "docker run..."
+# cmd doesn't allow you to pass args when you run "docker run..."
 ENTRYPOINT ["node", "index.js"]
+
