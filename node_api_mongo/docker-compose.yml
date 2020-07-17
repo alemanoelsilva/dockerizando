@@ -1,0 +1,20 @@
+version: "3"
+services:
+  node_api_mongo:
+    container_name: node_api_mongo
+    image: node_mongo:0.0.2
+    restart: always
+    build: .
+    ports:
+      - "2020:2020"
+    environment:
+      DB_URL: 'mongodb://mongo:27017'
+    links:
+      - mongo
+  mongo:
+    container_name: mongo
+    image: mongo
+    volumes:
+      - ./data:/data/db
+    ports:
+      - "27017:27017"
