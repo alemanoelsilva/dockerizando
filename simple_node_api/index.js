@@ -7,6 +7,7 @@ const init = async () => {
     app.use(bodyParser.urlencoded({ extended: true }));
     app.use(bodyParser.json());
 
+    // curl -i GET http://localhost:3030/test 
     app.get('/test', (request, response) => {
         console.log('\n\nEITA', request.config)
 
@@ -16,6 +17,7 @@ const init = async () => {
 
     });
 
+    // curl -i GET http://localhost:3030/test/oi
     app.get('/test/oi', (request, response) => {
         console.log('\n\nEITA', request.config)
 
