@@ -5,3 +5,6 @@ data/
 redis.conf/
 redis-data/
 dynamodb-data/
+
+*/.env
+/node_api_dynamo/.env
