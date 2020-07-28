@@ -1,0 +1,23 @@
+{
+  "name": "node_api_redis",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm run build:remove && npm run build:create && npm run build:up",
+    "build:remove": "docker rm -f $(docker ps -a -q)",
+    "build:create": "docker build -t node_dynamo:0.0.1 .",
+    "build:up": "docker-compose up",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.721.0",
+    "body-parser": "^1.19.0",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "redis": "^3.0.2"
+  }
+}
