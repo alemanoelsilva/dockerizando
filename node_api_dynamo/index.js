@@ -73,22 +73,30 @@ const createTable = async () => {
     }
   };
 
-  dynamodb.createTable(params, function (err, data) {
-    if (err) {
-      console.error("Unable to create table. Error JSON:", JSON.stringify(err, null, 2));
-    } else {
-      console.log("Created table. Table description JSON:", JSON.stringify(data, null, 2));
-    }
-  });
+  const createTableAsync = promisify(dynamodb.createTable).bind(dynamodb);
+
+  try {
+    const data = await createTableAsync(params)
+
+    console.log("Created table. Table description JSON:", JSON.stringify(data, null, 2));
+
+    return data
+
+  } catch (error) {
+    console.error("Unable to create table. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
 }
 
 
 const load = async () => {
   console.log("Importing movies into DynamoDB. Please wait.");
 
+  const dynamoPutAsync = promisify(docClient.put).bind(docClient);
+
   const allMovies = JSON.parse(fs.readFileSync('moviedata.json', 'utf8'));
 
-  allMovies.forEach(function (movie) {
+  const promises = allMovies.map(async (movie) => {
     const params = {
       TableName: DATABASE_NAME,
       Item: {
@@ -98,16 +106,76 @@ const load = async () => {
       }
     };
 
-    docClient.put(params, function (err, data) {
-      if (err) {
-        console.error("Unable to add movie", movie.title, ". Error JSON:", JSON.stringify(err, null, 2));
-      } else {
-        console.log("PutItem succeeded:", movie.title);
-      }
-    });
+    try {
+      const data = await dynamoPutAsync(params)
+      console.log("PutItem succeeded:", movie.title);
+      return data
 
+    } catch (error) {
+      console.error("Unable to add movie", movie.title, ". Error JSON:", JSON.stringify(error, null, 2));
+      return false
+    }
   });
+
+  return Promise.all(promises)
+
 }
+
+const read = async ({ year, title }) => {
+  const params = {
+    TableName: DATABASE_NAME,
+    Key: {
+      "year": parseInt(year, 10),
+      "title": title
+    }
+  };
+
+  console.log('params', params)
+
+  const dynamoGetAsync = promisify(docClient.get).bind(docClient);
+
+  try {
+    const data = await dynamoGetAsync(params)
+    console.log("GetItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+  } catch (error) {
+    console.error("Unable to read item. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
+}
+
+const atomicPlus = async ({ year, title }) => {
+
+  // Increment an atomic counter
+
+  const params = {
+    TableName: DATABASE_NAME,
+    Key: {
+      "year": parseInt(year, 10),
+      "title": title
+    },
+    UpdateExpression: "set info.rating = info.rating + :val",
+    ExpressionAttributeValues: {
+      ":val": 1
+    },
+    ReturnValues: "UPDATED_NEW"
+  };
+
+  const dynamoUpdateAsync = promisify(docClient.update).bind(docClient);
+
+  try {
+    console.log("Updating the item...");
+
+    const data = await dynamoUpdateAsync(params)
+    console.log("UpdateItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+
+  } catch (error) {
+    console.error("Unable to update item. Error JSON:", JSON.stringify(err, null, 2));
+    return false
+  }
+}
+
 
 const init = async () => {
   await createTable()
@@ -117,7 +185,7 @@ const init = async () => {
   app.use(bodyParser.json());
 
   // curl -i GET http://localhost:2020/test 
-  app.get('/test', (request, response) => 
+  app.get('/test', (request, response) =>
     response.status(200).json({
       teste: 1, teste_2: 2
     }).end());
@@ -129,7 +197,54 @@ const init = async () => {
     response.status(200).json({
       message: 'foi loadado'
     }).end();
+  });
 
+  // curl -i GET http://localhost:2020/test/find?year=1997&title=Anaconda
+  app.get('/test/find', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { year, title } = request.query;
+
+    const resp = await read({ year, title })
+
+    console.log('resp', resp)
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
+      data: resp.Item,
+    }).end();
+  });
+
+  // curl -i PATCH http://localhost:2020/test/atomic/add?year=1997&title=Anaconda
+  app.patch('/test/atomic;add', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { year, title } = request.query;
+
+    const resp = await atomicPlus({ year, title })
+
+    console.log('resp', resp)
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
+      data: resp.Item,
+    }).end();
   });
 
   // // curl -i GET http://localhost:2020/test/find
