@@ -88,7 +88,6 @@ const createTable = async () => {
   }
 }
 
-
 const load = async () => {
   console.log("Importing movies into DynamoDB. Please wait.");
 
@@ -145,7 +144,6 @@ const read = async ({ year, title }) => {
 }
 
 const atomicPlus = async ({ year, title }) => {
-
   // Increment an atomic counter
 
   const params = {
@@ -171,11 +169,123 @@ const atomicPlus = async ({ year, title }) => {
     return data
 
   } catch (error) {
-    console.error("Unable to update item. Error JSON:", JSON.stringify(err, null, 2));
+    console.error("Unable to update item. Error JSON:", JSON.stringify(error, null, 2));
     return false
   }
 }
 
+const update = async ({ year, title, body }) => {
+  const params = {
+    TableName: DATABASE_NAME,
+    Key: {
+      "year": parseInt(year, 10),
+      "title": title
+    },
+    UpdateExpression: "set info.rating = :r, info.plot=:p, info.actors=:a",
+    ExpressionAttributeValues: {
+      ":r": parseFloat(body.rating),
+      ":p": body.plot,
+      ":a": body.actors,
+    },
+    ReturnValues: "UPDATED_NEW"
+  };
+
+  const dynamoUpdateAsync = promisify(docClient.update).bind(docClient);
+
+  try {
+    console.log("Updating the item...");
+
+    const data = await dynamoUpdateAsync(params)
+    console.log("UpdateItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+
+  } catch (error) {
+    console.error("Unable to update item. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
+}
+
+const destroy = async ({ year, title }) => {
+  const params = {
+    TableName: DATABASE_NAME,
+    Key: {
+      "year": parseInt(year, 10),
+      "title": title
+    },
+    ConditionExpression: "title <= :t",
+    ExpressionAttributeValues: {
+      ":t": title
+    }
+  };
+
+  const dynamoDeleteAsync = promisify(docClient.delete).bind(docClient);
+
+  try {
+    console.log("Destroying the item...");
+
+    const data = await dynamoDeleteAsync(params)
+    console.log("DeletedItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+
+  } catch (error) {
+    console.error("Unable to Delete item. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
+}
+
+const query = async ({ year }) => {
+  const params = {
+    TableName: DATABASE_NAME,
+    KeyConditionExpression: "#yr = :yyyy",
+    ExpressionAttributeNames: {
+      "#yr": "year"
+    },
+    ExpressionAttributeValues: {
+      ":yyyy": parseInt(year, 10)
+    }
+  };
+
+  console.log('params', params)
+
+  const dynamoQueryAsync = promisify(docClient.query).bind(docClient);
+
+  try {
+    const data = await dynamoQueryAsync(params)
+    console.log("QueryItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+  } catch (error) {
+    console.error("Unable to query item. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
+}
+
+const scan = async ({ startYear, endYear }) => {
+  const params = {
+    TableName: DATABASE_NAME,
+    ProjectionExpression: "#yr, title, info.rating",
+    FilterExpression: "#yr between :start_yr and :end_yr",
+    ExpressionAttributeNames: {
+      "#yr": "year",
+    },
+    ExpressionAttributeValues: {
+      ":start_yr": parseInt(startYear, 10),
+      ":end_yr": parseInt(endYear, 10)
+    }
+  };
+
+  console.log("Scanning Movies table.");
+
+  const dynamoScanAsync = promisify(docClient.scan).bind(docClient);
+
+  try {
+    const data = await dynamoScanAsync(params)
+    console.log("ScanItem succeeded:", JSON.stringify(data, null, 2));
+    return data
+  } catch (error) {
+    console.error("Unable to scan item. Error JSON:", JSON.stringify(error, null, 2));
+    return false
+  }
+}
 
 const init = async () => {
   await createTable()
@@ -200,6 +310,7 @@ const init = async () => {
   });
 
   // curl -i GET http://localhost:2020/test/find?year=1997&title=Anaconda
+  // curl -i GET http://localhost:2020/test/find?year=1999&title=Fight%20Club
   app.get('/test/find', async (request, response) => {
     console.log('request.params', request.params)
     console.log('request.query', request.query)
@@ -223,8 +334,8 @@ const init = async () => {
     }).end();
   });
 
-  // curl -i PATCH http://localhost:2020/test/atomic/add?year=1997&title=Anaconda
-  app.patch('/test/atomic;add', async (request, response) => {
+  // curl -X PATCH http://localhost:2020/test/atomic/add?year=1997&title=Anaconda
+  app.patch('/test/atomic/add', async (request, response) => {
     console.log('request.params', request.params)
     console.log('request.query', request.query)
     console.log('request.body', request.body)
@@ -243,7 +354,103 @@ const init = async () => {
 
     return response.status(200).json({
       message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
-      data: resp.Item,
+      data: resp.Attributes,
+    }).end();
+  });
+
+  // curl -H "Content-Type: application/json" -X PUT http://localhost:2020/test/update?year=1997&title=Anaconda -d "@update.txt"
+  app.put('/test/update', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { body } = request;
+    const { year, title } = request.query;
+
+    const resp = await update({ year, title, body })
+
+    console.log('resp', resp)
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
+      data: resp.Attributes,
+    }).end();
+  });
+
+  // curl --request DELETE http://localhost:2020/test/delete?year=1997&title=Anaconda
+  // curl --request DELETE http://localhost:2020/test/delete?year=1999&title=Fight%20Club
+  app.delete('/test/delete', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { year, title } = request.query;
+
+    const resp = await destroy({ year, title })
+
+    console.log('resp', resp)
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp ? 'Hoje siiiim' : 'Hoje não',
+      data: title + ' deletado',
+    }).end();
+  });
+
+  // curl -i GET http://localhost:2020/test/query?year=1997
+  // curl -i GET http://localhost:2020/test/query?year=1999
+  app.get('/test/query', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { year } = request.query;
+
+    const resp = await query({ year })
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
+      data: resp.Items,
+    }).end();
+  });
+
+  // curl -i GET http://localhost:2020/test/scan?startYear=1999&ndYear=2005
+  // curl -i GET http://localhost:2020/test/scan?startYear=1950&ndYear=1980
+  app.get('/test/scan', async (request, response) => {
+    console.log('request.params', request.params)
+    console.log('request.query', request.query)
+    console.log('request.body', request.body)
+
+    const { startYear, endYear } = request.query;
+
+    const resp = await scan({ startYear, endYear })
+
+    if (!resp) {
+      return response.status(500).json({
+        message: 'Não deu mesmo hein'
+      }).end();
+    }
+
+    return response.status(200).json({
+      message: resp.Item ? 'Hoje siiiim' : 'Hoje não',
+      data: resp.Items,
     }).end();
   });
 
@@ -323,8 +530,9 @@ const init = async () => {
 
 /**
  *
- * mongo: docker run --name mongo-teste -p 27017:27017 -d mongo
- * redis: docker run --name redis-teste -p 6379:6379 -d redis:alpine
+ * mongo : docker run --name mongo-teste  -p 27017:27017 -d mongo
+ * redis : docker run --name redis-teste  -p 6379:6379   -d redis:alpine
+ * dynamo: docker run --name dynamo-teste -p 8000:8000   -d amazon/dynamodb-local
  *
  * docker rm $(docker ps -a -q)
 */

@@ -1,0 +1,5 @@
+{
+    "rating": 10.5,
+    "plot": "This is the incredible plot for a unknow movie",
+    "actors": ["Actor 1", "Actor 2", "Actor 3"]
+}
