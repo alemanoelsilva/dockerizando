@@ -431,8 +431,9 @@ const init = async () => {
     }).end();
   });
 
-  // curl -i GET http://localhost:2020/test/scan?startYear=1999&ndYear=2005
-  // curl -i GET http://localhost:2020/test/scan?startYear=1950&ndYear=1980
+  // curl -i GET http://localhost:2020/test/scan?startYear=1999&endYear=2005
+  // curl -i GET http://localhost:2020/test/scan?startYear=1950&endYear=1980
+  // curl -i GET http://localhost:2020/test/scan?startYear=1000&endYear=2100
   app.get('/test/scan', async (request, response) => {
     console.log('request.params', request.params)
     console.log('request.query', request.query)
