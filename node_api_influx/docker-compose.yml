@@ -1,0 +1,34 @@
+version: "3"
+services:
+  api:
+    container_name: api
+    image: node_influx:0.0.1
+    restart: always
+    build: .
+    ports:
+      - "2020:2020"
+    environment:
+      DB_URL: "http://influxdb:8086"
+      DATABASE_NAME: "mydb"
+      TABLE_NAME: "HTTP"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_KEY: "TESTE"
+      REDIS_TIME: 60
+    links:
+      - influxdb
+      - redis
+  influxdb:
+    container_name: influxdb
+    image: influxdb
+    volumes:
+      - $PWD/influxdb-data:/var/lib/influxdblocal
+    ports:
+      - "8086:8086"
+  redis:
+    container_name: redis
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    volumes:
+      - $PWD/redis-data:/var/lib/redis
+      - $PWD/redis.conf:/usr/local/etc/redis/redis.conf
