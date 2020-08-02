@@ -8,17 +8,17 @@ services:
     ports:
       - "2020:2020"
     environment:
-      DB_URL: "http://influxdb:8086"
-      DATABASE_NAME: "mydb"
-      TABLE_NAME: "HTTP"
+      DB_URL: "http://influx:8086" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      DATABASE_NAME: "ocean_tides"
+      TABLE_NAME: "tide"
       REDIS_URL: "redis://redis:6379"
       REDIS_KEY: "TESTE"
       REDIS_TIME: 60
     links:
-      - influxdb
+      - influx
       - redis
-  influxdb:
-    container_name: influxdb
+  influx:
+    container_name: influx
     image: influxdb
     volumes:
       - $PWD/influxdb-data:/var/lib/influxdblocal

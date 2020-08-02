@@ -13,6 +13,7 @@
     "body-parser": "^1.19.0",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
+    "influx": "^5.6.2",
     "influxdb-nodejs": "^3.1.0"
   }
 }

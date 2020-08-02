@@ -2,73 +2,101 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 
+const CRASH = 1
+
 const {
   DB_URL,
   DATABASE_NAME,
   TABLE_NAME,
 } = process.env;
 
-const Influx = require('influxdb-nodejs');
+// const Influx = require('influxdb-nodejs');
 
-const TYPE = {
-  INTEGER: 'i',
-  STRING: 's',
-  FLOAT: 'f',
-  BOOLEAN: 'bi',
-}
+const Influx = require('influx');
 
-const TAG_TYPE = {
-  '10X': '1',
-  '20X': '2',
-  '30X': '3',
-  '40X': '4',
-  '50X': '5',
-}
-
-const tableSchema = {
-  use: TYPE.INTEGER,
-  bytes: TYPE.INTEGER,
-  url: TYPE.STRING,
-}
-
-const SPDY = {
-  SPEEDY: 'speedy',
-  FAST: 'fast',
-  SLOW: 'slow',
-}
-
-const METHOD = {
-  GET: 'GET',
-  POST: 'POST',
-  PUT: 'PUT',
-  DELETE: 'DELETE',
-  PATCH: 'PATCH',
-  '*': ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
-}
-
-const tableTags = {
-  spdy: Object.values(SPDY),
-  method: METHOD['*'],
-  type: Object.values(TAG_TYPE)
-}
-
-const createTable = (influx) => {
+const createTable = async () => {
   try {
-    influx.schema(TABLE_NAME, tableSchema, tableTags, {
-      // default is false
-      stripUnknown: true,
-    })
+    const influx = new Influx.InfluxDB({
+      host: DB_URL,
+      database: DATABASE_NAME,
+      schema: [
+        {
+          measurement: 'tide',
+          fields: { height: Influx.FieldType.FLOAT },
+          tags: ['unit', 'location']
+        }
+      ]
+    });
+
+    console.log('conectou influx, influx!!', influx)
+    return influx
   } catch (error) {
-    console.log(`createTable error..: ${error}`)
+    console.error('oh no, this influx is not the same', error)
+    process.exit(CRASH)
+  }
+}
+
+const checkInfluxDB = async (influxDB) => {
+  try {
+    const databaseNames = await influxDB.getDatabaseNames()
+
+    const mydb = databaseNames.some(name => name === DATABASE_NAME)
+
+    if (!mydb) {
+      await influxDB.createDatabase(DATABASE_NAME)
+      console.log('Creating my database')
+      return false
+    }
+
+    console.log('It was not necessary create my database')
+    return true
+  } catch (error) {
+    console.error('oh no, this influx is not the same', error)
+    process.exit(CRASH)
+  }
+}
+
+const save = influxDB => async ({ unit, location, height }) => {
+  try {
+    const point = await influxDB.writePoints([
+      {
+        measurement: TABLE_NAME,
+        tags: {
+          unit,
+          location,
+        },
+        fields: { height },
+        timestamp: new Date(),
+      }
+    ])
+
+    console.log('The data was created with no problem at all')
+    return point
+  } catch (error) {
+    console.error('oh no, this influx is not the same', error.message)
+    process.exit(CRASH)
+  }
+}
+
+const queryLocation = influxDB => async ({ location }) => {
+  try {
+    const point = await influxDB.query(`
+    select * from tide
+    where location =~ /(?i)(${location})/
+  `)
+
+    console.log('The data was found with no problem at all')
+    return point
+  } catch (error) {
+    console.error('oh no, this influx is not the same', error)
+    process.exit(CRASH)
   }
 }
 
 const init = async () => {
   console.log(`influxDB..: ${DB_URL}/${DATABASE_NAME}`)
 
-  const influxdb = new Influx(`${DB_URL}/${DATABASE_NAME}`)
-
-  createTable(influxdb)
+  const influxDB = await createTable()
 
   const app = express();
 
@@ -77,69 +105,52 @@ const init = async () => {
 
   // curl -i GET http://localhost:2020/influx 
   app.get('/influx', (request, response) => {
-    console.log('\n\nEITA', request.config)
-
     response.status(200).json({
       teste: 1, teste_2: 2
     }).end();
-
   });
 
-  // curl -i GET http://localhost:2020/influx/find?spdy=1&method=GET&use=200
-  app.get('/influx/find', async (request, response) => {
+  // curl -i GET http://localhost:2020/influx/checkdb
+  app.get('/influx/checkdb', async (request, response) => {
+    const res = await checkInfluxDB(influxDB)
+
+    if (!res) {
+      return response.status(200).json({
+        message: 'The database was not created in a application set up'
+      }).end()
+    }
+
+    response.status(200).json({
+      message: 'All is working'
+    }).end()
+  })
+
+  // curl -i GET http://localhost:2020/influx/query/location?location=Brazil
+  app.get('/influx/query/location', async (request, response) => {
     console.log('query', request.query)
 
-    const { spdy, method, use } = request.query
+    const { location } = request.query
 
-    try {
-      const res = await influxdb
-        .query(TABLE_NAME)
-        .where('spdy', spdy)
-        .where('method', method)
-        .where('use', use, '>=')
+    const res = await queryLocation(influxDB)({ location })
 
-      response.status(200).json({
-        message: 'iupi',
-        data: res,
-      }).end();
-    } catch (error) {
-      console.error(error)
-
-      response.status(500).json({
-        message: 'nao foi dessa vez irmão',
-        data: error.message,
-      }).end();
-    }
+    response.status(200).json({
+      message: 'The data was found with no problem at all',
+      data: res,
+    }).end();
   });
 
   // curl -i POST http://localhost:2020/influx/create -H "Content-Type: application/json" -d "@payload.txt"
   app.post('/influx/create', async (request, response) => {
     console.log('body', request.body)
 
-    const { use, bytes, url } = request.body
+    const { measurement, unit, location, height } = request.body
 
-    try {
-      const res = await influxdb
-        .write(TABLE_NAME)
-        .tag({
-          spdy: SPDY.FAST,
-          method: METHOD.GET,
-          type: TAG_TYPE['20X'],
-        })
-        .field({ use, bytes, url })
+    const res = await save(influxDB)({ measurement, unit, location, height })
 
-      response.status(200).json({
-        message: 'iupi',
-        data: res,
-      }).end();
-    } catch (error) {
-      console.error(error)
-
-      response.status(500).json({
-        message: 'nao foi dessa vez irmão',
-        data: error.message,
-      }).end();
-    }
+    response.status(200).json({
+      message: 'The data was created with no problem at all',
+      data: res,
+    }).end();
   })
 
   await app.listen(2020);
@@ -148,3 +159,9 @@ const init = async () => {
 };
 
 (async () => await init())()
+
+
+/**
+ * 
+ * influxdb: docker run --name influx-teste -p 8086:8086   -d influxdb
+ */
