@@ -1,0 +1,26 @@
+version: "3"
+services:
+  node_api_rabbitmq:
+    container_name: node_api_rabbitmq
+    image: node_rabbitmq:0.0.1
+    restart: always
+    build: .
+    ports:
+      - 2020:2020
+    environment:
+      RABBIT_MQ_HOST: amqp://rabbitmq:5672
+      RABBIT_MQ_REQUEST_QUEUE: new-message
+      RABBIT_MQ_RESPONSE_QUEUE: message-created
+    links:
+      - rabbitmq
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management
+    volumes:
+      - ./rabbitmq/etc/definitions.json:/etc/rabbitmq/definitions.json
+      - ./rabbitmq/etc/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/data:/var/lib/rabbitmq/mnesia/rabbit@my-rabbit
+      - ./rabbitmq/logs:/var/log/rabbitmq/log
+    ports:
+      - 5672:5672
+      - 15672:15672
