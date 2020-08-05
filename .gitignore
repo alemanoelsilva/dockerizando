@@ -6,6 +6,7 @@ redis.conf/
 redis-data/
 dynamodb-data/
 influxdb-data/
+full-stack/
 
 node_api_dynamo/index.js
 
