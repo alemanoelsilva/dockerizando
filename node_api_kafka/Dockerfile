@@ -14,7 +14,8 @@ RUN npm install
 
 # esposed port
 EXPOSE 2020
-EXPOSE 5672
+EXPOSE 2181
+EXPOSE 9092
 
 # entrypoint allows you to pass args when you run "docker run..."
 # cmd doesn't allow you to pass args when you run "docker run..."

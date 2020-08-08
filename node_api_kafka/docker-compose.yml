@@ -1,19 +1,5 @@
 version: "3"
 services:
-  # node_api_kafka:
-  #   container_name: node_api_kafka
-  #   image: node_kafka:0.0.1
-  #   restart: always
-  #   build: .
-  #   ports:
-  #     - 2020:2020
-  #   environment:
-  #     KAFKA_HOST: amqp://kafka:9092
-  #     KAFKA_REQUEST_QUEUE: new-message
-  #     KAFKA_RESPONSE_QUEUE: message-created
-  #   links:
-  #     - zookeeper
-  #     - kafka
   zoo1:
     image: zookeeper:3.4.9
     restart: unless-stopped
@@ -25,10 +11,10 @@ services:
         ZOO_PORT: 2181
         ZOO_SERVERS: server.1=zoo1:2888:3888
     volumes:
-      - ./full-stack/zoo1/data:/data
-      - ./full-stack/zoo1/datalog:/datalog
+      - ./volume/zoo1/data:/data
+      - ./volume/zoo1/datalog:/datalog
   kafka1:
-    image: confluentinc/cp-kafka:5.2.1
+    image: confluentinc/cp-kafka:5.3.0
     hostname: kafka1
     ports:
       - "9092:9092"
@@ -41,6 +27,6 @@ services:
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     volumes:
-      - ./full-stack/kafka1/data:/var/lib/kafka/data
+      - ./volume/kafka1/data:/var/lib/kafka/data
     depends_on:
       - zoo1

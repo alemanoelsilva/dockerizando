@@ -11,13 +11,14 @@ const {
 } = require('kafka-node');
 
 const {
-  KAFKA_HOST = 'localhost:9092',
+  KAFKA_HOST,
   KAFKA_REQUEST_QUEUE,
   KAFKA_RESPONSE_QUEUE,
 } = process.env
 
+console.log('KAFKA_HOST', KAFKA_HOST)
+
 const getKafkaClient = (host = KAFKA_HOST) => {
-  // The client connects to a Kafka broker
   const client = new KafkaClient({ kafkaHost: host });
 
   return client
@@ -29,10 +30,10 @@ const getMessageConsumer = ({ topic, value }) => {
   console.log(JSON.parse(value))
 }
 
-const consumer = ({ host = KAFKA_HOST, topic, logger }) => ({
+const consumer = ({ topic, logger }) => ({
   start: async (job) => {
     try {
-      const client = getKafkaClient(host)
+      const client = getKafkaClient(KAFKA_HOST)
 
       const topics = [{ topic, partition: 0 }]
 
@@ -40,21 +41,24 @@ const consumer = ({ host = KAFKA_HOST, topic, logger }) => ({
         autoCommit: false,
         fetchMaxWaitMs: 1000,
         fetchMaxBytes: 1024 * 1024,
+        requestTimeout: false
       };
 
       const consumer = new Consumer(client, topics, options);
 
       const refreshMetadata = promisify(client.refreshMetadata).bind(client)
-
       await refreshMetadata([topic])
 
+
       consumer.on('message', (message) => {
-        // do something useful with message
         job(message)
       });
 
+      consumer.on('error', (err) => {
+        console.log('Consumer::::::', err)
+      })
+
     } catch (error) {
-      console.log(error)
       logger.error(`There was an error on Consumer run ${error}`);
     }
   }
@@ -91,11 +95,12 @@ const producer = ({ topic, logger }) => ({
   send: producer => async (message) => {
     try {
       const send = promisify(producer.send).bind(producer)
+
       await send([{
         topic, messages: [JSON.stringify(message)]
       }])
 
-      logger.info(`The producer is sending the message to the broke :)`)
+      logger.info(`The producer is sending the message to the broker :)`)
     } catch (error) {
       logger.error(`This producer made a wrong thing ${error.message}`)
     }
@@ -109,15 +114,14 @@ const init = async () => {
   app.use(bodyParser.json());
 
   const publisher = await producer({
-    topic: 'topic_test',
+    topic: KAFKA_REQUEST_QUEUE,
     logger: console,
   })
 
   const publish = await publisher.start()
 
   await consumer({
-    host: KAFKA_HOST,
-    topic: 'topic_test',
+    topic: KAFKA_RESPONSE_QUEUE,
     logger: console,
   }).start(getMessageConsumer)
 
@@ -129,10 +133,10 @@ const init = async () => {
   });
 
   // curl -i POST http://localhost:2020/kafka/create -H "Content-Type: application/json" -d "@payload.txt"
-  app.post('/kafka/create', (request, response) => {
+  app.post('/kafka/create', async (request, response) => {
     console.log('body', request.body)
 
-    publisher.send(publish)(request.body)
+    await publisher.send(publish)(request.body)
 
     response.status(200).json({
       message: 'Message was sent'

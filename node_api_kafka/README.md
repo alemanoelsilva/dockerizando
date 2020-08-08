@@ -7,8 +7,14 @@
 docker build -t name:tag .
 ```
 
-## To run
+## To run the kafka environment
 
 ```shell
 docker-compose up
+```
+
+## To run the node application
+
+```shell
+node index.js
 ```

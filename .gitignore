@@ -10,5 +10,5 @@ full-stack/
 
 node_api_dynamo/index.js
 
-
+volume/
 *.env
